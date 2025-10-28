@@ -4,7 +4,7 @@ import os
 
 app = FastAPI()
 
-PASSWORD = "admin123"
+PASSWORD = "Exshop12_"
 STOCK_FILE = "stock.txt"
 
 # ===============================
@@ -16,8 +16,8 @@ async def home():
     <html>
     <head><title>Gen API</title></head>
     <body style="font-family: sans-serif; text-align: center; margin-top: 80px;">
-        <h1>🚀 API de generación activa</h1>
-        <p>Usa /panel para gestionar el stock.</p>
+        <h1>API activa</h1>
+        <p>q miras pillin.</p>
     </body>
     </html>
     """
@@ -29,25 +29,25 @@ async def home():
 async def panel():
     return """
     <html>
-    <head><title>Panel de Stock</title></head>
+    <head><title>stock panel</title></head>
     <body style="font-family: sans-serif; text-align: center; margin-top: 50px;">
         <h2>🌐 Subir stock desde web</h2>
         <form action="/upload_stock" method="post" enctype="multipart/form-data">
-            <input type="password" name="password" placeholder="Contraseña" required><br><br>
+            <input type="password" name="password" placeholder="pass" required><br><br>
             <input type="file" name="file" accept=".txt" required><br><br>
-            <button type="submit">📤 Subir Stock</button>
+            <button type="submit">subir stock</button>
         </form>
     </body>
     </html>
     """
 
 # ===============================
-# SUBIR STOCK
+# subir stock
 # ===============================
 @app.post("/upload_stock", response_class=HTMLResponse)
 async def upload_stock(password: str = Form(...), file: UploadFile = File(...)):
     if password != PASSWORD:
-        return HTMLResponse("<h3>❌ Contraseña incorrecta</h3>", status_code=403)
+        return HTMLResponse("<h3>no</h3>", status_code=403)
 
     content = await file.read()
     with open(STOCK_FILE, "wb") as f:
@@ -55,10 +55,10 @@ async def upload_stock(password: str = Form(...), file: UploadFile = File(...)):
 
     # Contar cuántas líneas hay
     lines = [l for l in content.decode("utf-8").splitlines() if l.strip()]
-    return HTMLResponse(f"<h3>✅ Stock actualizado con {len(lines)} cuentas.</h3>")
+    return HTMLResponse(f"<h3>has subido {len(lines)} cuentas.</h3>")
 
 # ===============================
-# VER STOCK DISPONIBLE
+# stock dispo
 # ===============================
 @app.get("/stock")
 async def get_stock():
@@ -71,7 +71,7 @@ async def get_stock():
     return {"count": len(lines)}
 
 # ===============================
-# GENERAR CUENTA (PARA EL BOT)
+# gen acc para el bot
 # ===============================
 @app.post("/gen")
 async def gen_account():
@@ -96,3 +96,4 @@ async def gen_account():
         "remaining": len(lines),
         "message": "OK"
     })
+
