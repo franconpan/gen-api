@@ -1,83 +1,90 @@
-from fastapi import FastAPI, Form
-from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import JSONResponse
+from fastapi import FastAPI, UploadFile, Form
+from fastapi.responses import HTMLResponse, JSONResponse
 import os
 
 app = FastAPI()
 
-# Permitir peticiones desde cualquier origen (para el bot)
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=["*"],
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
-
 STOCK_FILE = "stock.txt"
+PASSWORD = "admin123"  # 🔒 cámbiala a algo más seguro
 
-# -------------------------------
-# 📦 Obtener stock actual
-# -------------------------------
-@app.get("/stock")
-async def get_stock():
+
+@app.get("/")
+def home():
+    return {"message": "API de generación funcionando 🚀"}
+
+
+@app.get("/gen")
+def gen():
     if not os.path.exists(STOCK_FILE):
-        return {"count": 0}
+        return JSONResponse({"success": False, "message": "No hay stock disponible"})
 
     with open(STOCK_FILE, "r", encoding="utf-8") as f:
-        lines = [line.strip() for line in f if line.strip()]
-
-    return {"count": len(lines)}
-
-# -------------------------------
-# 🧩 Generar cuenta (eliminar 1 del stock)
-# -------------------------------
-@app.post("/gen")
-async def generate_account():
-    if not os.path.exists(STOCK_FILE):
-        return JSONResponse(content={"success": False, "message": "No hay archivo de stock."})
-
-    with open(STOCK_FILE, "r", encoding="utf-8") as f:
-        lines = [line.strip() for line in f if line.strip()]
+        lines = [l.strip() for l in f if l.strip()]
 
     if not lines:
-        return JSONResponse(content={"success": False, "message": "No hay stock disponible."})
+        return JSONResponse({"success": False, "message": "Sin stock"})
 
-    account = lines.pop(0)  # primera cuenta
+    account = lines.pop(0)
 
     with open(STOCK_FILE, "w", encoding="utf-8") as f:
         f.write("\n".join(lines))
 
-    return JSONResponse(content={
+    return JSONResponse({
         "success": True,
         "account": account,
         "remaining": len(lines),
         "message": "OK"
     })
 
-# -------------------------------
-# 🧠 Subir stock manualmente desde formulario
-# -------------------------------
-@app.post("/upload")
-async def upload_stock(content: str = Form(...)):
-    lines = [line.strip() for line in content.splitlines() if line.strip()]
-    with open(STOCK_FILE, "a", encoding="utf-8") as f:
-        for line in lines:
-            f.write(line + "\n")
-    return {"message": f"{len(lines)} cuentas añadidas correctamente"}
 
-# -------------------------------
-# 🌐 Página simple
-# -------------------------------
-@app.get("/")
-async def home():
-    return """
-    <h2>🚀 Panel de generación activo</h2>
-    <p>Endpoints:</p>
-    <ul>
-        <li><b>GET /stock</b> → muestra cuántas cuentas hay</li>
-        <li><b>POST /gen</b> → genera una cuenta</li>
-        <li><b>POST /upload</b> (campo "content") → añade cuentas</li>
-    </ul>
+@app.get("/stock")
+def stock():
+    if not os.path.exists(STOCK_FILE):
+        return {"count": 0}
+
+    with open(STOCK_FILE, "r", encoding="utf-8") as f:
+        lines = [l.strip() for l in f if l.strip()]
+
+    return {"count": len(lines)}
+
+
+# 🌐 Panel web para subir stock
+@app.get("/panel", response_class=HTMLResponse)
+def panel():
+    html = """
+    <html>
+        <head>
+            <title>Panel de Stock</title>
+            <style>
+                body { font-family: Arial; margin: 40px; background-color: #111; color: #eee; }
+                input, button { padding: 8px; margin-top: 10px; }
+                .card { background: #222; padding: 20px; border-radius: 10px; width: 300px; }
+            </style>
+        </head>
+        <body>
+            <div class="card">
+                <h2>📦 Panel de Stock</h2>
+                <form action="/upload_stock" method="post" enctype="multipart/form-data">
+                    <label>Contraseña:</label><br>
+                    <input type="password" name="password" /><br>
+                    <label>Archivo stock.txt:</label><br>
+                    <input type="file" name="file" accept=".txt"/><br>
+                    <button type="submit">Subir Stock</button>
+                </form>
+            </div>
+        </body>
+    </html>
     """
+    return HTMLResponse(html)
 
+
+@app.post("/upload_stock")
+async def upload_stock(file: UploadFile, password: str = Form(...)):
+    if password != PASSWORD:
+        return HTMLResponse("<h2>❌ Contraseña incorrecta</h2>", status_code=403)
+
+    content = await file.read()
+    with open(STOCK_FILE, "wb") as f:
+        f.write(content)
+
+    return HTMLResponse("<h2>✅ Stock actualizado correctamente</h2>")
