@@ -1,120 +1,98 @@
-from fastapi import FastAPI, Form, Request
-from fastapi.responses import HTMLResponse
-from fastapi.middleware.cors import CORSMiddleware
-import os, json
+from fastapi import FastAPI, Request, Form, UploadFile, File
+from fastapi.responses import HTMLResponse, JSONResponse
+import os
 
 app = FastAPI()
 
-# Permitir CORS para que el bot o panel web accedan sin problema
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=["*"],
-    allow_methods=["*"],
-    allow_headers=["*"]
-)
-
+PASSWORD = "admin123"
 STOCK_FILE = "stock.txt"
-PASSWORD = "admin123"  # 🔐 contraseña del panel
 
-
-# ===========================
-# Página principal
-# ===========================
+# ===============================
+# PÁGINA PRINCIPAL
+# ===============================
 @app.get("/", response_class=HTMLResponse)
 async def home():
     return """
-    <h2>✅ API Online</h2>
-    <p>Endpoints disponibles:</p>
-    <ul>
-      <li><b>GET</b> /stock → Ver cantidad disponible</li>
-      <li><b>POST</b> /gen → Generar una cuenta</li>
-      <li><b>GET</b> /panel → Subir stock (requiere contraseña)</li>
-    </ul>
+    <html>
+    <head><title>Gen API</title></head>
+    <body style="font-family: sans-serif; text-align: center; margin-top: 80px;">
+        <h1>🚀 API de generación activa</h1>
+        <p>Usa /panel para gestionar el stock.</p>
+    </body>
+    </html>
     """
 
+# ===============================
+# PANEL DE ADMINISTRACIÓN
+# ===============================
+@app.get("/panel", response_class=HTMLResponse)
+async def panel():
+    return """
+    <html>
+    <head><title>Panel de Stock</title></head>
+    <body style="font-family: sans-serif; text-align: center; margin-top: 50px;">
+        <h2>🌐 Subir stock desde web</h2>
+        <form action="/upload_stock" method="post" enctype="multipart/form-data">
+            <input type="password" name="password" placeholder="Contraseña" required><br><br>
+            <input type="file" name="file" accept=".txt" required><br><br>
+            <button type="submit">📤 Subir Stock</button>
+        </form>
+    </body>
+    </html>
+    """
 
-# ===========================
-# Obtener stock
-# ===========================
+# ===============================
+# SUBIR STOCK
+# ===============================
+@app.post("/upload_stock", response_class=HTMLResponse)
+async def upload_stock(password: str = Form(...), file: UploadFile = File(...)):
+    if password != PASSWORD:
+        return HTMLResponse("<h3>❌ Contraseña incorrecta</h3>", status_code=403)
+
+    content = await file.read()
+    with open(STOCK_FILE, "wb") as f:
+        f.write(content)
+
+    # Contar cuántas líneas hay
+    lines = [l for l in content.decode("utf-8").splitlines() if l.strip()]
+    return HTMLResponse(f"<h3>✅ Stock actualizado con {len(lines)} cuentas.</h3>")
+
+# ===============================
+# VER STOCK DISPONIBLE
+# ===============================
 @app.get("/stock")
 async def get_stock():
     if not os.path.exists(STOCK_FILE):
         return {"count": 0}
 
     with open(STOCK_FILE, "r", encoding="utf-8") as f:
-        lines = [x.strip() for x in f if x.strip()]
+        lines = [l.strip() for l in f if l.strip()]
 
     return {"count": len(lines)}
 
-
-# ===========================
-# Generar cuenta
-# ===========================
+# ===============================
+# GENERAR CUENTA (PARA EL BOT)
+# ===============================
 @app.post("/gen")
-async def gen():
+async def gen_account():
     if not os.path.exists(STOCK_FILE):
-        return {"success": False, "message": "No hay stock disponible."}
+        return JSONResponse({"success": False, "message": "Stock file not found"})
 
     with open(STOCK_FILE, "r", encoding="utf-8") as f:
-        lines = [x.strip() for x in f if x.strip()]
+        lines = [l.strip() for l in f if l.strip()]
 
     if not lines:
-        return {"success": False, "message": "No hay stock disponible."}
+        return JSONResponse({"success": False, "message": "No stock available"})
 
-    cuenta = lines.pop(0)
+    account = lines.pop(0)
 
     with open(STOCK_FILE, "w", encoding="utf-8") as f:
-        f.write("\n".join(lines))
+        for l in lines:
+            f.write(l + "\n")
 
-    print(f"✅ GEN: {cuenta} | Restante: {len(lines)}")
-
-    return {
+    return JSONResponse({
         "success": True,
-        "account": cuenta,
+        "account": account,
         "remaining": len(lines),
         "message": "OK"
-    }
-
-
-# ===========================
-# Panel web para subir stock
-# ===========================
-@app.get("/panel", response_class=HTMLResponse)
-async def panel_form():
-    return """
-    <h2>🌐 Subir stock</h2>
-    <form action="/upload_stock" method="post">
-      <label>Contraseña:</label><br>
-      <input type="password" name="password" /><br><br>
-      <label>Lista (una cuenta por línea):</label><br>
-      <textarea name="stock" rows="10" cols="50"></textarea><br><br>
-      <button type="submit">Subir</button>
-    </form>
-    """
-
-
-# ===========================
-# Subir stock (POST)
-# ===========================
-@app.post("/upload_stock")
-async def upload_stock(password: str = Form(...), stock: str = Form(...)):
-    if password != PASSWORD:
-        return HTMLResponse("<h3>❌ Contraseña incorrecta</h3>")
-
-    stock = stock.strip().splitlines()
-    stock = [x.strip() for x in stock if x.strip()]
-
-    with open(STOCK_FILE, "w", encoding="utf-8") as f:
-        f.write("\n".join(stock))
-
-    print(f"✅ STOCK actualizado: {len(stock)} cuentas")
-
-    return HTMLResponse(f"<h3>✅ Stock actualizado correctamente ({len(stock)} cuentas)</h3>")
-
-
-# ===========================
-# Run local (opcional)
-# ===========================
-if __name__ == "__main__":
-    import uvicorn
-    uvicorn.run("app:app", host="0.0.0.0", port=10000)
+    })
