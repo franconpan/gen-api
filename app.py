@@ -10,8 +10,8 @@ STOCK_FILE = "stock.txt"
 
 # ⚙️ CONFIGURA TU PASTEBIN
 PASTEBIN_RAW_URL = "https://pastebin.com/raw/J0d6VmvF"
-PASTEBIN_API_KEY = "TU_API_KEY"        # 🔹 tu Dev Key
-PASTEBIN_USER_KEY = "TU_USER_KEY"      # 🔹 tu User Key
+PASTEBIN_API_KEY = "MfVd26Py5Tjx5n-DUIHoaYIgXOCKVLw-"        # 🔹 tu Dev Key
+PASTEBIN_USER_KEY = "b305f2ac691288145a1781a7562535dd"      # 🔹 tu User Key
 PASTEBIN_PASTE_KEY = "J0d6VmvF"        # 🔹 ID del paste
 # ⚠️ Asegúrate de que tu paste sea privado para poder editarlo vía API
 
@@ -147,3 +147,4 @@ async def gen():
     update_pastebin()
 
     return {"account": cuenta}
+
