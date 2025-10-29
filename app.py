@@ -5,28 +5,29 @@ import requests
 
 app = FastAPI()
 
+# 🔧 CONFIGURACIÓN
 PASSWORD = "Exshop12_"
 STOCK_FILE = "stock.txt"
 
-# ⚙️ CONFIGURA TU PASTEBIN
+# ⚙️ Datos Pastebin (paste privado)
 PASTEBIN_RAW_URL = "https://pastebin.com/raw/J0d6VmvF"
-PASTEBIN_API_KEY = "MfVd26Py5Tjx5n-DUIHoaYIgXOCKVLw-"        # 🔹 tu Dev Key
-PASTEBIN_USER_KEY = "b305f2ac691288145a1781a7562535dd"      # 🔹 tu User Key
-PASTEBIN_PASTE_KEY = "J0d6VmvF"        # 🔹 ID del paste
-# ⚠️ Asegúrate de que tu paste sea privado para poder editarlo vía API
+PASTEBIN_API_KEY = "MfVd26Py5Tjx5n-DUIHoaYIgXOCKVLw-"
+PASTEBIN_USER_KEY = "b305f2ac691288145a1781a7562535dd"
+PASTEBIN_PASTE_KEY = "J0d6VmvF"  # ID del paste privado
 
 # ===============================
 # 🔁 FUNCIONES PASTEBIN
 # ===============================
 def load_stock_from_pastebin():
-    """Descarga el stock del Pastebin y lo guarda localmente."""
+    """Descarga stock del Pastebin y guarda localmente si no existe stock.txt."""
     try:
         r = requests.get(PASTEBIN_RAW_URL, timeout=10)
         if r.status_code == 200:
             data = r.text.strip()
-            with open(STOCK_FILE, "w", encoding="utf-8") as f:
-                f.write(data)
-            print("✅ Stock restaurado desde Pastebin.")
+            if not os.path.exists(STOCK_FILE) or os.path.getsize(STOCK_FILE) == 0:
+                with open(STOCK_FILE, "w", encoding="utf-8") as f:
+                    f.write(data)
+                print("✅ Stock restaurado desde Pastebin.")
             return data.splitlines()
         else:
             print("⚠️ Error al restaurar stock:", r.status_code)
@@ -37,16 +38,16 @@ def load_stock_from_pastebin():
 
 def update_pastebin():
     """Actualiza el stock en el Pastebin privado."""
+    if not os.path.exists(STOCK_FILE):
+        return
     try:
-        if not os.path.exists(STOCK_FILE):
-            return
         with open(STOCK_FILE, "r", encoding="utf-8") as f:
             data = f.read().strip()
 
         payload = {
             "api_dev_key": PASTEBIN_API_KEY,
             "api_user_key": PASTEBIN_USER_KEY,
-            "api_option": "edit",
+            "api_option": "edit",          # Edita el paste existente
             "api_paste_key": PASTEBIN_PASTE_KEY,
             "api_paste_code": data
         }
@@ -64,9 +65,8 @@ def update_pastebin():
 # ===============================
 @app.on_event("startup")
 def startup_event():
-    """Al iniciar, descarga el stock actual del Pastebin si no existe local."""
-    if not os.path.exists(STOCK_FILE) or os.path.getsize(STOCK_FILE) == 0:
-        load_stock_from_pastebin()
+    """Al iniciar Render, descarga el stock si no existe local."""
+    load_stock_from_pastebin()
 
 # ===============================
 # 🌐 PANEL WEB
@@ -95,7 +95,7 @@ async def upload_stock(password: str = Form(...), file: UploadFile = File(...)):
     content = await file.read()
     new_lines = [l.strip() for l in content.decode("utf-8").splitlines() if l.strip()]
 
-    # 🔹 Leer stock existente y combinarlo
+    # Leer stock existente y combinar
     existing_lines = []
     if os.path.exists(STOCK_FILE):
         with open(STOCK_FILE, "r", encoding="utf-8") as f:
@@ -106,6 +106,7 @@ async def upload_stock(password: str = Form(...), file: UploadFile = File(...)):
     with open(STOCK_FILE, "w", encoding="utf-8") as f:
         f.write("\n".join(combined_lines))
 
+    # Actualiza Pastebin
     update_pastebin()
     return HTMLResponse(f"<h3>✅ Añadidas {len(new_lines)} cuentas. Stock total: {len(combined_lines)}</h3>")
 
@@ -119,7 +120,6 @@ async def get_stock():
     else:
         with open(STOCK_FILE, "r", encoding="utf-8") as f:
             lines = [l.strip() for l in f if l.strip()]
-
     return {"count": len(lines)}
 
 # ===============================
@@ -143,8 +143,6 @@ async def gen():
     with open(STOCK_FILE, "w", encoding="utf-8") as f:
         f.write("\n".join(lines))
 
-    # Actualiza Pastebin con el stock nuevo
+    # Actualiza Pastebin
     update_pastebin()
-
     return {"account": cuenta}
-
