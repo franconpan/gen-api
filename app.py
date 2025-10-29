@@ -12,7 +12,7 @@ STOCK_FILE = "stock.txt"
 # ⚙️ Datos Pastebin (paste privado)
 PASTEBIN_RAW_URL = "https://pastebin.com/raw/J0d6VmvF"
 PASTEBIN_API_KEY = "MfVd26Py5Tjx5n-DUIHoaYIgXOCKVLw-"
-PASTEBIN_USER_KEY = "b305f2ac691288145a1781a7562535dd"
+PASTEBIN_USER_KEY = "84b24637a39a3153b785c8a6250ee4d7"
 PASTEBIN_PASTE_KEY = "J0d6VmvF"  # ID del paste privado
 
 # ===============================
@@ -146,3 +146,4 @@ async def gen():
     # Actualiza Pastebin
     update_pastebin()
     return {"account": cuenta}
+
