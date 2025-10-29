@@ -8,11 +8,12 @@ app = FastAPI()
 PASSWORD = "Exshop12_"
 STOCK_FILE = "stock.txt"
 
-# ⚙️ CONFIGURA TUS DATOS DE PASTEBIN
+# ⚙️ CONFIGURA TU PASTEBIN
 PASTEBIN_RAW_URL = "https://pastebin.com/raw/J0d6VmvF"
-PASTEBIN_API_KEY = "MfVd26Py5Tjx5n-DUIHoaYIgXOCKVLw-"
-PASTEBIN_USER_KEY = "b305f2ac691288145a1781a7562535dd"
-PASTEBIN_PASTE_KEY = "J0d6VmvF"
+PASTEBIN_API_KEY = "TU_API_KEY"        # 🔹 tu Dev Key
+PASTEBIN_USER_KEY = "TU_USER_KEY"      # 🔹 tu User Key
+PASTEBIN_PASTE_KEY = "J0d6VmvF"        # 🔹 ID del paste
+# ⚠️ Asegúrate de que tu paste sea privado para poder editarlo vía API
 
 # ===============================
 # 🔁 FUNCIONES PASTEBIN
@@ -35,23 +36,24 @@ def load_stock_from_pastebin():
         return []
 
 def update_pastebin():
-    """Sube el stock actualizado al Pastebin."""
+    """Actualiza el stock en el Pastebin privado."""
     try:
+        if not os.path.exists(STOCK_FILE):
+            return
         with open(STOCK_FILE, "r", encoding="utf-8") as f:
             data = f.read().strip()
 
         payload = {
             "api_dev_key": PASTEBIN_API_KEY,
             "api_user_key": PASTEBIN_USER_KEY,
-            "api_option": "paste",  # ✅ se crea una nueva versión pública
-            "api_paste_private": "0",  # público
-            "api_paste_name": "Stock actualizado",
+            "api_option": "edit",
+            "api_paste_key": PASTEBIN_PASTE_KEY,
             "api_paste_code": data
         }
 
         r = requests.post("https://pastebin.com/api/api_post.php", data=payload, timeout=10)
         if r.status_code == 200 and "Bad API request" not in r.text:
-            print("✅ Stock actualizado en Pastebin.")
+            print("✅ Stock actualizado correctamente en Pastebin.")
         else:
             print("⚠️ Error al actualizar Pastebin:", r.text)
     except Exception as e:
@@ -62,8 +64,9 @@ def update_pastebin():
 # ===============================
 @app.on_event("startup")
 def startup_event():
-    """Al iniciar Render, descarga el stock actual del Pastebin."""
-    load_stock_from_pastebin()
+    """Al iniciar, descarga el stock actual del Pastebin si no existe local."""
+    if not os.path.exists(STOCK_FILE) or os.path.getsize(STOCK_FILE) == 0:
+        load_stock_from_pastebin()
 
 # ===============================
 # 🌐 PANEL WEB
@@ -90,14 +93,21 @@ async def upload_stock(password: str = Form(...), file: UploadFile = File(...)):
         return HTMLResponse("<h3>❌ Contraseña incorrecta</h3>", status_code=403)
 
     content = await file.read()
-    decoded = content.decode("utf-8").strip()
+    new_lines = [l.strip() for l in content.decode("utf-8").splitlines() if l.strip()]
+
+    # 🔹 Leer stock existente y combinarlo
+    existing_lines = []
+    if os.path.exists(STOCK_FILE):
+        with open(STOCK_FILE, "r", encoding="utf-8") as f:
+            existing_lines = [l.strip() for l in f if l.strip()]
+
+    combined_lines = existing_lines + new_lines
 
     with open(STOCK_FILE, "w", encoding="utf-8") as f:
-        f.write(decoded)
+        f.write("\n".join(combined_lines))
 
     update_pastebin()
-    count = len([l for l in decoded.splitlines() if l.strip()])
-    return HTMLResponse(f"<h3>✅ Has subido {count} cuentas nuevas.</h3>")
+    return HTMLResponse(f"<h3>✅ Añadidas {len(new_lines)} cuentas. Stock total: {len(combined_lines)}</h3>")
 
 # ===============================
 # 📦 ENDPOINT /stock
@@ -118,13 +128,12 @@ async def get_stock():
 @app.post("/gen")
 async def gen():
     lines = []
-
     if os.path.exists(STOCK_FILE):
         with open(STOCK_FILE, "r", encoding="utf-8") as f:
             lines = [l.strip() for l in f if l.strip()]
 
     if not lines:
-        # Si el stock local está vacío, intenta restaurarlo del Pastebin
+        # Restaurar stock desde Pastebin si se vació
         lines = load_stock_from_pastebin()
         if not lines:
             return JSONResponse({"error": "No hay stock disponible."}, status_code=400)
@@ -134,7 +143,7 @@ async def gen():
     with open(STOCK_FILE, "w", encoding="utf-8") as f:
         f.write("\n".join(lines))
 
-    # Actualiza Pastebin con el nuevo stock
+    # Actualiza Pastebin con el stock nuevo
     update_pastebin()
 
     return {"account": cuenta}
