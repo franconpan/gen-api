@@ -1,11 +1,25 @@
 from fastapi import FastAPI, Request, Form, UploadFile, File
 from fastapi.responses import HTMLResponse, JSONResponse
-import os
+from fastapi.middleware.cors import CORSMiddleware
+import sqlite3, os
 
 app = FastAPI()
 
 PASSWORD = "Exshop12_"
-STOCK_FILE = "stock.txt"
+DB_PATH = "stock.db"
+
+# ===============================
+# BASE DE DATOS
+# ===============================
+def init_db():
+    with sqlite3.connect(DB_PATH) as conn:
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS stock (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                cuenta TEXT NOT NULL
+            )
+        """)
+init_db()
 
 # ===============================
 # PÁGINA PRINCIPAL
@@ -49,12 +63,16 @@ async def upload_stock(password: str = Form(...), file: UploadFile = File(...)):
     if password != PASSWORD:
         return HTMLResponse("<h3>no</h3>", status_code=403)
 
-    content = await file.read()
-    with open(STOCK_FILE, "wb") as f:
-        f.write(content)
+    content = (await file.read()).decode("utf-8")
+    lines = [l.strip() for l in content.splitlines() if l.strip()]
 
-    # Contar cuántas líneas hay
-    lines = [l for l in content.decode("utf-8").splitlines() if l.strip()]
+    # Guardar en la base de datos
+    with sqlite3.connect(DB_PATH) as conn:
+        conn.execute("DELETE FROM stock")
+        for cuenta in lines:
+            conn.execute("INSERT INTO stock (cuenta) VALUES (?)", (cuenta,))
+        conn.commit()
+
     return HTMLResponse(f"<h3>has subido {len(lines)} cuentas.</h3>")
 
 # ===============================
@@ -62,38 +80,30 @@ async def upload_stock(password: str = Form(...), file: UploadFile = File(...)):
 # ===============================
 @app.get("/stock")
 async def get_stock():
-    if not os.path.exists(STOCK_FILE):
-        return {"count": 0}
-
-    with open(STOCK_FILE, "r", encoding="utf-8") as f:
-        lines = [l.strip() for l in f if l.strip()]
-
-    return {"count": len(lines)}
+    with sqlite3.connect(DB_PATH) as conn:
+        count = conn.execute("SELECT COUNT(*) FROM stock").fetchone()[0]
+    return {"count": count}
 
 # ===============================
 # gen acc para el bot
 # ===============================
 @app.post("/gen")
 async def gen_account():
-    if not os.path.exists(STOCK_FILE):
-        return JSONResponse({"success": False, "message": "Stock file not found"})
+    with sqlite3.connect(DB_PATH) as conn:
+        row = conn.execute("SELECT id, cuenta FROM stock ORDER BY id LIMIT 1").fetchone()
 
-    with open(STOCK_FILE, "r", encoding="utf-8") as f:
-        lines = [l.strip() for l in f if l.strip()]
+        if not row:
+            return JSONResponse({"success": False, "message": "No stock available"})
 
-    if not lines:
-        return JSONResponse({"success": False, "message": "No stock available"})
+        account_id, account = row
+        conn.execute("DELETE FROM stock WHERE id = ?", (account_id,))
+        conn.commit()
 
-    account = lines.pop(0)
-
-    with open(STOCK_FILE, "w", encoding="utf-8") as f:
-        for l in lines:
-            f.write(l + "\n")
+        remaining = conn.execute("SELECT COUNT(*) FROM stock").fetchone()[0]
 
     return JSONResponse({
         "success": True,
         "account": account,
-        "remaining": len(lines),
+        "remaining": remaining,
         "message": "OK"
     })
-
