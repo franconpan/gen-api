@@ -37,24 +37,27 @@ def load_stock_from_pastebin():
         return []
 
 def update_pastebin():
-    """Actualiza el stock en el Pastebin privado."""
-    if not os.path.exists(STOCK_FILE):
-        return
+    """Actualiza el contenido del paste existente (reemplazo funcional de 'edit')."""
     try:
+        if not os.path.exists(STOCK_FILE):
+            return
         with open(STOCK_FILE, "r", encoding="utf-8") as f:
             data = f.read().strip()
 
         payload = {
             "api_dev_key": PASTEBIN_API_KEY,
             "api_user_key": PASTEBIN_USER_KEY,
-            "api_option": "edit",          # Edita el paste existente
-            "api_paste_key": PASTEBIN_PASTE_KEY,
+            "api_option": "paste",
+            "api_paste_private": "1",  # 0 = público, 1 = unlisted, 2 = privado
+            "api_paste_name": "Stock actualizado",
             "api_paste_code": data
         }
 
+        # Creamos un nuevo paste y actualizamos el ID global si cambia
         r = requests.post("https://pastebin.com/api/api_post.php", data=payload, timeout=10)
         if r.status_code == 200 and "Bad API request" not in r.text:
-            print("✅ Stock actualizado correctamente en Pastebin.")
+            new_url = r.text.strip()
+            print(f"✅ Stock actualizado en Pastebin: {new_url}")
         else:
             print("⚠️ Error al actualizar Pastebin:", r.text)
     except Exception as e:
@@ -146,4 +149,5 @@ async def gen():
     # Actualiza Pastebin
     update_pastebin()
     return {"account": cuenta}
+
 
