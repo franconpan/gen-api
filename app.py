@@ -9,28 +9,28 @@ PASSWORD = "Exshop12_"
 STOCK_FILE = "stock.txt"
 
 # 🧠 Configura estos valores
-PASTEBIN_RAW_URL = "https://pastebin.com/raw/XXXXXXXX"  # tu paste actual
+PASTEBIN_RAW_URL = "https://pastebin.com/raw/J0d6VmvF"  # tu paste existente
 PASTEBIN_API_KEY = "MfVd26Py5Tjx5n-DUIHoaYIgXOCKVLw-"
-PASTEBIN_USER_KEY = "TU_USER_KEY_DE_PASTEBIN"  # opcional si usas cuenta
+PASTEBIN_USER_KEY = "b305f2ac691288145a1781a7562535dd"  # ⚠️ pon aquí tu user key
+PASTEBIN_PASTE_KEY = "J0d6VmvF"  # ID del paste (lo que va después de /)
 
 # ===============================
 # FUNCIÓN: Descargar stock si falta
 # ===============================
 def load_stock_from_pastebin():
-    if not os.path.exists(STOCK_FILE):
-        try:
-            r = requests.get(PASTEBIN_RAW_URL, timeout=10)
-            if r.status_code == 200:
-                with open(STOCK_FILE, "w", encoding="utf-8") as f:
-                    f.write(r.text)
-                print("✅ Stock restaurado desde Pastebin.")
-            else:
-                print("⚠️ Error al restaurar stock:", r.status_code)
-        except Exception as e:
-            print("⚠️ Error al conectar con Pastebin:", e)
+    try:
+        r = requests.get(PASTEBIN_RAW_URL, timeout=10)
+        if r.status_code == 200:
+            with open(STOCK_FILE, "w", encoding="utf-8") as f:
+                f.write(r.text)
+            print("✅ Stock restaurado desde Pastebin.")
+        else:
+            print("⚠️ Error al restaurar stock:", r.status_code)
+    except Exception as e:
+        print("⚠️ Error al conectar con Pastebin:", e)
 
 # ===============================
-# FUNCIÓN: Subir stock actualizado a Pastebin
+# FUNCIÓN: Subir stock actualizado al mismo paste
 # ===============================
 def update_pastebin():
     try:
@@ -39,26 +39,28 @@ def update_pastebin():
 
         payload = {
             "api_dev_key": PASTEBIN_API_KEY,
-            "api_option": "paste",
-            "api_paste_code": data,
-            "api_paste_private": "1",  # 0=public, 1=unlisted, 2=private
-            "api_paste_name": "gen_stock",
-            "api_paste_expire_date": "N",
+            "api_user_key": PASTEBIN_USER_KEY,
+            "api_option": "edit",
+            "api_paste_key": PASTEBIN_PASTE_KEY,
+            "api_paste_code": data
         }
 
         r = requests.post("https://pastebin.com/api/api_post.php", data=payload, timeout=10)
-        if r.status_code == 200:
-            print("✅ Stock sincronizado con Pastebin:", r.text)
+        if r.status_code == 200 and "Bad API request" not in r.text:
+            print("✅ Stock actualizado correctamente en Pastebin.")
         else:
-            print("⚠️ Error al subir stock:", r.status_code)
+            print("⚠️ Error al actualizar Pastebin:", r.text)
     except Exception as e:
-        print("⚠️ Error al actualizar Pastebin:", e)
-
-# Cargar stock al iniciar
-load_stock_from_pastebin()
+        print("⚠️ Error al sincronizar con Pastebin:", e)
 
 # ===============================
-# PANEL / subir stock
+# Al iniciar, si no hay stock local, lo descarga
+# ===============================
+if not os.path.exists(STOCK_FILE) or os.path.getsize(STOCK_FILE) == 0:
+    load_stock_from_pastebin()
+
+# ===============================
+# PANEL WEB
 # ===============================
 @app.get("/panel", response_class=HTMLResponse)
 async def panel():
@@ -79,15 +81,15 @@ async def panel():
 @app.post("/upload_stock", response_class=HTMLResponse)
 async def upload_stock(password: str = Form(...), file: UploadFile = File(...)):
     if password != PASSWORD:
-        return HTMLResponse("<h3>no</h3>", status_code=403)
+        return HTMLResponse("<h3>❌ Contraseña incorrecta</h3>", status_code=403)
 
     content = await file.read()
     with open(STOCK_FILE, "wb") as f:
         f.write(content)
 
     lines = [l for l in content.decode("utf-8").splitlines() if l.strip()]
-    update_pastebin()  # sincroniza Pastebin
-    return HTMLResponse(f"<h3>has subido {len(lines)} cuentas.</h3>")
+    update_pastebin()  # 🔄 sincroniza automáticamente
+    return HTMLResponse(f"<h3>✅ Has subido {len(lines)} cuentas nuevas.</h3>")
 
 # ===============================
 # stock dispo
@@ -104,27 +106,21 @@ async def get_stock():
 # gen acc para el bot
 # ===============================
 @app.post("/gen")
-async def gen_account():
+async def gen():
     if not os.path.exists(STOCK_FILE):
-        return JSONResponse({"success": False, "message": "Stock file not found"})
+        return JSONResponse({"error": "No hay stock disponible."}, status_code=400)
 
     with open(STOCK_FILE, "r", encoding="utf-8") as f:
         lines = [l.strip() for l in f if l.strip()]
 
     if not lines:
-        return JSONResponse({"success": False, "message": "No stock available"})
+        return JSONResponse({"error": "Stock vacío."}, status_code=400)
 
-    account = lines.pop(0)
+    cuenta = lines.pop(0)
 
     with open(STOCK_FILE, "w", encoding="utf-8") as f:
-        for l in lines:
-            f.write(l + "\n")
+        f.write("\n".join(lines))
 
-    update_pastebin()  # ✅ sincroniza cada vez que alguien genera
+    update_pastebin()  # 🔄 Guarda el cambio en Pastebin
 
-    return JSONResponse({
-        "success": True,
-        "account": account,
-        "remaining": len(lines),
-        "message": "OK"
-    })
+    return {"account": cuenta}
