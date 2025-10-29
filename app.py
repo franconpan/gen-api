@@ -1,43 +1,64 @@
-from fastapi import FastAPI, Request, Form, UploadFile, File
+from fastapi import FastAPI, Form, UploadFile, File
 from fastapi.responses import HTMLResponse, JSONResponse
-from fastapi.middleware.cors import CORSMiddleware
-import sqlite3, os
+import os
+import requests
 
 app = FastAPI()
 
 PASSWORD = "Exshop12_"
-DB_PATH = "stock.db"
+STOCK_FILE = "stock.txt"
+
+# 🧠 Configura estos valores
+PASTEBIN_RAW_URL = "https://pastebin.com/raw/XXXXXXXX"  # tu paste actual
+PASTEBIN_API_KEY = "MfVd26Py5Tjx5n-DUIHoaYIgXOCKVLw-"
+PASTEBIN_USER_KEY = "TU_USER_KEY_DE_PASTEBIN"  # opcional si usas cuenta
 
 # ===============================
-# BASE DE DATOS
+# FUNCIÓN: Descargar stock si falta
 # ===============================
-def init_db():
-    with sqlite3.connect(DB_PATH) as conn:
-        conn.execute("""
-            CREATE TABLE IF NOT EXISTS stock (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                cuenta TEXT NOT NULL
-            )
-        """)
-init_db()
+def load_stock_from_pastebin():
+    if not os.path.exists(STOCK_FILE):
+        try:
+            r = requests.get(PASTEBIN_RAW_URL, timeout=10)
+            if r.status_code == 200:
+                with open(STOCK_FILE, "w", encoding="utf-8") as f:
+                    f.write(r.text)
+                print("✅ Stock restaurado desde Pastebin.")
+            else:
+                print("⚠️ Error al restaurar stock:", r.status_code)
+        except Exception as e:
+            print("⚠️ Error al conectar con Pastebin:", e)
 
 # ===============================
-# PÁGINA PRINCIPAL
+# FUNCIÓN: Subir stock actualizado a Pastebin
 # ===============================
-@app.get("/", response_class=HTMLResponse)
-async def home():
-    return """
-    <html>
-    <head><title>Gen API</title></head>
-    <body style="font-family: sans-serif; text-align: center; margin-top: 80px;">
-        <h1>API activa</h1>
-        <p>q miras pillin.</p>
-    </body>
-    </html>
-    """
+def update_pastebin():
+    try:
+        with open(STOCK_FILE, "r", encoding="utf-8") as f:
+            data = f.read()
+
+        payload = {
+            "api_dev_key": PASTEBIN_API_KEY,
+            "api_option": "paste",
+            "api_paste_code": data,
+            "api_paste_private": "1",  # 0=public, 1=unlisted, 2=private
+            "api_paste_name": "gen_stock",
+            "api_paste_expire_date": "N",
+        }
+
+        r = requests.post("https://pastebin.com/api/api_post.php", data=payload, timeout=10)
+        if r.status_code == 200:
+            print("✅ Stock sincronizado con Pastebin:", r.text)
+        else:
+            print("⚠️ Error al subir stock:", r.status_code)
+    except Exception as e:
+        print("⚠️ Error al actualizar Pastebin:", e)
+
+# Cargar stock al iniciar
+load_stock_from_pastebin()
 
 # ===============================
-# PANEL DE ADMINISTRACIÓN
+# PANEL / subir stock
 # ===============================
 @app.get("/panel", response_class=HTMLResponse)
 async def panel():
@@ -55,24 +76,17 @@ async def panel():
     </html>
     """
 
-# ===============================
-# subir stock
-# ===============================
 @app.post("/upload_stock", response_class=HTMLResponse)
 async def upload_stock(password: str = Form(...), file: UploadFile = File(...)):
     if password != PASSWORD:
         return HTMLResponse("<h3>no</h3>", status_code=403)
 
-    content = (await file.read()).decode("utf-8")
-    lines = [l.strip() for l in content.splitlines() if l.strip()]
+    content = await file.read()
+    with open(STOCK_FILE, "wb") as f:
+        f.write(content)
 
-    # Guardar en la base de datos
-    with sqlite3.connect(DB_PATH) as conn:
-        conn.execute("DELETE FROM stock")
-        for cuenta in lines:
-            conn.execute("INSERT INTO stock (cuenta) VALUES (?)", (cuenta,))
-        conn.commit()
-
+    lines = [l for l in content.decode("utf-8").splitlines() if l.strip()]
+    update_pastebin()  # sincroniza Pastebin
     return HTMLResponse(f"<h3>has subido {len(lines)} cuentas.</h3>")
 
 # ===============================
@@ -80,30 +94,37 @@ async def upload_stock(password: str = Form(...), file: UploadFile = File(...)):
 # ===============================
 @app.get("/stock")
 async def get_stock():
-    with sqlite3.connect(DB_PATH) as conn:
-        count = conn.execute("SELECT COUNT(*) FROM stock").fetchone()[0]
-    return {"count": count}
+    if not os.path.exists(STOCK_FILE):
+        return {"count": 0}
+    with open(STOCK_FILE, "r", encoding="utf-8") as f:
+        lines = [l.strip() for l in f if l.strip()]
+    return {"count": len(lines)}
 
 # ===============================
 # gen acc para el bot
 # ===============================
 @app.post("/gen")
 async def gen_account():
-    with sqlite3.connect(DB_PATH) as conn:
-        row = conn.execute("SELECT id, cuenta FROM stock ORDER BY id LIMIT 1").fetchone()
+    if not os.path.exists(STOCK_FILE):
+        return JSONResponse({"success": False, "message": "Stock file not found"})
 
-        if not row:
-            return JSONResponse({"success": False, "message": "No stock available"})
+    with open(STOCK_FILE, "r", encoding="utf-8") as f:
+        lines = [l.strip() for l in f if l.strip()]
 
-        account_id, account = row
-        conn.execute("DELETE FROM stock WHERE id = ?", (account_id,))
-        conn.commit()
+    if not lines:
+        return JSONResponse({"success": False, "message": "No stock available"})
 
-        remaining = conn.execute("SELECT COUNT(*) FROM stock").fetchone()[0]
+    account = lines.pop(0)
+
+    with open(STOCK_FILE, "w", encoding="utf-8") as f:
+        for l in lines:
+            f.write(l + "\n")
+
+    update_pastebin()  # ✅ sincroniza cada vez que alguien genera
 
     return JSONResponse({
         "success": True,
         "account": account,
-        "remaining": remaining,
+        "remaining": len(lines),
         "message": "OK"
     })
